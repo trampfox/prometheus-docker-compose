@@ -1,0 +1,76 @@
+version: '3.8'
+
+volumes: 
+  prometheus_data: {}
+  grafana_data: {}
+
+networks:
+  front-end:
+  back-end:
+
+services:
+
+  prometheus:
+    image: prom/prometheus:v2.18.1
+    volumes:
+      - $HOME/prometheus/:/etc/prometheus/
+      - $HOME/prometheus/data/:/prometheus/
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    ports:
+      - 9090:9090
+    links:
+      - cadvisor:cadvisor
+    networks:
+      - back-end
+    depends_on:
+      - cadvisor
+    restart: always
+
+  node-exporter:
+    image: prom/node-exporter
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command: 
+      - '--path.procfs=/host/proc' 
+      - '--path.sysfs=/host/sys'
+      - --collector.filesystem.ignored-mount-points
+      - "^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/containers|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/aufs)($$|/)"
+    ports:
+      - 9100:9100
+    networks:
+      - back-end
+    restart: always
+
+  cadvisor:
+    image: gcr.io/google-containers/cadvisor:v0.35.0
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    ports:
+      - 8080:8080
+    networks:
+      - back-tier
+    restart: always
+
+  grafana:
+    image: grafana/grafana:6.7.3
+    user: "472"
+    depends_on:
+      - prometheus
+    ports:
+      - 3000:3000
+    volumes:
+      - $HOME/grafana/data:/var/lib/grafana
+      - ./grafana/provisioning/:/etc/grafana/provisioning/
+    env_file:
+      - ./grafana/config.monitoring
+    networks: 
+      - back-end
+      - front-end
+    restart: always
